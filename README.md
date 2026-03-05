@@ -20,3 +20,19 @@
 
 ## 目標機
 僅放置 `dist/kb-guardian/`，不需安裝 Python。
+
+## Auto-Copilot（無人值守）
+執行下列任一方式可自動完成 build + smoke + 離線包打包 + checkpoint：
+
+1. 雙擊 `AUTO_COPILOT.bat`
+2. PowerShell：
+   `powershell -ExecutionPolicy Bypass -File .\scripts\run_autocopilot.ps1`
+
+每批會寫入節點檔至 `autopilot/checkpoints/`，可用於回溯。
+
+## 產生離線交付包
+`powershell -ExecutionPolicy Bypass -File .\scripts\make_offline_bundle.ps1 -Rebuild`
+
+輸出位置：
+- 目錄：`release/kb-guardian-offline-<timestamp>/`
+- 壓縮檔：`release/kb-guardian-offline-<timestamp>.zip`
