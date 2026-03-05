@@ -1,0 +1,21 @@
+﻿[paths]
+kb_root = ../KB
+videos_dir = ../videos
+exports_dir = ../exports
+backups_dir = ../backups
+logseq_exe = ../tools/logseq-portable/Logseq.exe
+obs_exe = ../tools/obs-portable/bin/64bit/obs64.exe
+pandoc_exe = ../tools/pandoc/pandoc.exe
+
+[backup]
+max_backups = 30
+auto_backup_on_launch = true
+
+[protection]
+enable_delete_guard = true
+delete_threshold_count = 5
+delete_threshold_seconds = 60
+
+[review]
+enable_review_reminder = true
+default_review_days = 14

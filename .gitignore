@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.spec
+build/
+dist/
+release/
+.smoke_workspace/
+logs/
+backups/
+exports/
+tools/
+autopilot/runtime/
