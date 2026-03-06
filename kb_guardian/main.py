@@ -394,29 +394,53 @@ class KBGuardianApp:
         """建立 KB 壓縮備份，並清理超量舊檔。"""
         create_backup_archive(self.cfg.kb_root, self.cfg.backups_dir, self.cfg.max_backups, self.logger, prefix=prefix)
 
+    def _warn_missing_tool(self, tool_name: str, exe: Path, hint: str) -> None:
+        """顯示工具未安裝的友善提示對話框。"""
+        msg = (
+            f"找不到 {tool_name}。\n\n"
+            f"預期路徑：\n{exe}\n\n"
+            f"{hint}\n\n"
+            f"您也可以編輯同目錄下的 config.ini，\n"
+            f"修改對應路徑後重新啟動程式。"
+        )
+        self.logger.warning("找不到 %s：%s", tool_name, exe)
+        messagebox.showwarning(f"{tool_name} 未安裝", msg)
+
     def launch_logseq(self) -> None:
         """啟動 Logseq，可選擇先自動備份。"""
+        exe = self.cfg.logseq_exe
+        if not exe.exists():
+            self._warn_missing_tool(
+                "Logseq",
+                exe,
+                "請將 Logseq Portable 資料夾放置於上述路徑，\n"
+                "或從 https://logseq.com 下載安裝版後設定路徑。",
+            )
+            return
         try:
             if self.cfg.auto_backup_on_launch:
                 self.backup_kb()
-            self._launch_exe(self.cfg.logseq_exe)
+            subprocess.Popen([str(exe)], cwd=str(exe.parent))
         except Exception as exc:
             self.logger.exception("啟動 Logseq 失敗")
             messagebox.showerror("錯誤", str(exc))
 
     def launch_obs(self) -> None:
         """啟動 OBS。"""
+        exe = self.cfg.obs_exe
+        if not exe.exists():
+            self._warn_missing_tool(
+                "OBS Studio",
+                exe,
+                "請將 OBS Portable 資料夾放置於上述路徑，\n"
+                "或從 https://obsproject.com 下載安裝版後設定路徑。",
+            )
+            return
         try:
-            self._launch_exe(self.cfg.obs_exe)
+            subprocess.Popen([str(exe)], cwd=str(exe.parent))
         except Exception as exc:
             self.logger.exception("啟動 OBS 失敗")
             messagebox.showerror("錯誤", str(exc))
-
-    def _launch_exe(self, exe: Path) -> None:
-        """啟動外部程式。"""
-        if not exe.exists():
-            raise FileNotFoundError(f"找不到執行檔：{exe}")
-        subprocess.Popen([str(exe)], cwd=str(exe.parent))
 
     def export_sop(self) -> None:
         """匯出單一 SOP 為 TXT 與 PDF。"""
@@ -425,7 +449,13 @@ class KBGuardianApp:
             raise FileNotFoundError(f"找不到 pages 目錄：{pages_dir}")
         pandoc = self.cfg.pandoc_exe
         if not pandoc.exists():
-            raise FileNotFoundError(f"找不到 Pandoc：{pandoc}")
+            self._warn_missing_tool(
+                "Pandoc",
+                pandoc,
+                "請將 pandoc.exe 放置於上述路徑，\n"
+                "或從 https://pandoc.org/installing.html 下載後設定路徑。",
+            )
+            return
 
         src = filedialog.askopenfilename(
             title="選擇要匯出的 SOP",
