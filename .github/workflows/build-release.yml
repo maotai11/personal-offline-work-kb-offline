@@ -6,8 +6,14 @@ on:
       - 'v*'
   workflow_dispatch:
 
+env:
+  PANDOC_VERSION: "3.6.4"
+  LOGSEQ_VERSION: "0.10.9"
+  OBS_VERSION: "31.0.3"
+
 jobs:
-  build-windows:
+  # ── Windows 完整離線包（含 Logseq / OBS / Pandoc）───────────────────
+  build-windows-bundle:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,15 +23,114 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install dependencies
-        run: |
-          pip install watchdog pyinstaller
+      - name: Install Python dependencies
+        run: pip install watchdog pyinstaller
 
       - name: Build Windows executable
         run: |
-          pyinstaller --noconfirm --onedir --windowed --name kb-guardian --add-data "config.ini;." kb_guardian/main.py
+          pyinstaller --noconfirm --onedir --windowed --name kb-guardian `
+            --add-data "config.ini;." kb_guardian/main.py
 
-      - name: Package artifact
+      - name: Download tools (parallel)
+        shell: pwsh
+        run: |
+          $jobs = @(
+            Start-Job { Invoke-WebRequest -Uri "https://github.com/jgm/pandoc/releases/download/$env:PANDOC_VERSION/pandoc-$env:PANDOC_VERSION-windows-x86_64.zip" -OutFile pandoc.zip }
+            Start-Job { Invoke-WebRequest -Uri "https://github.com/logseq/logseq/releases/download/$env:LOGSEQ_VERSION/Logseq-win-x64-$env:LOGSEQ_VERSION.zip" -OutFile logseq.zip }
+            Start-Job { Invoke-WebRequest -Uri "https://github.com/obsproject/obs-studio/releases/download/$env:OBS_VERSION/OBS-Studio-$env:OBS_VERSION-Windows.zip" -OutFile obs.zip }
+          )
+          $jobs | Wait-Job | Receive-Job
+
+      - name: Extract tools into bundle structure
+        shell: pwsh
+        run: |
+          # Pandoc → tools\pandoc\pandoc.exe
+          Expand-Archive pandoc.zip -DestinationPath _pandoc_tmp
+          New-Item -ItemType Directory -Force tools\pandoc | Out-Null
+          Copy-Item "_pandoc_tmp\pandoc-$env:PANDOC_VERSION\pandoc.exe" tools\pandoc\
+
+          # Logseq → tools\logseq-portable\
+          Expand-Archive logseq.zip -DestinationPath tools\logseq-portable
+
+          # OBS → tools\obs-portable\
+          Expand-Archive obs.zip -DestinationPath tools\obs-portable
+
+      - name: Assemble offline bundle
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}"
+          if (-not $version.StartsWith("v")) { $version = "dev" }
+          $bundleName = "kb-guardian-windows-offline-$version"
+
+          New-Item -ItemType Directory $bundleName | Out-Null
+
+          # KB-Guardian 執行檔
+          Copy-Item dist\kb-guardian\* $bundleName\ -Recurse
+
+          # 工具資料夾（config.ini 路徑：..\tools\...）
+          Copy-Item tools\ "$bundleName\..\tools" -Recurse
+
+          # 壓縮
+          $zipName = "$bundleName.zip"
+          Compress-Archive -Path $bundleName, "$bundleName\..\tools" -DestinationPath $zipName
+          $hash = (Get-FileHash $zipName -Algorithm SHA256).Hash.ToLower()
+          echo "BUNDLE_ZIP=$zipName" >> $env:GITHUB_ENV
+          echo "BUNDLE_SHA256=$hash" >> $env:GITHUB_ENV
+          Write-Host "Bundle: $zipName  ($([math]::Round((Get-Item $zipName).Length/1MB, 1)) MB)"
+          Write-Host "SHA256: $hash"
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kb-guardian-windows-offline-bundle
+          path: ${{ env.BUNDLE_ZIP }}
+
+      - name: Create / update GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.BUNDLE_ZIP }}
+          body: |
+            ## KB-Guardian ${{ github.ref_name }} — Windows 完整離線包
+
+            ### 包含工具
+            | 工具 | 版本 |
+            |------|------|
+            | Logseq | ${{ env.LOGSEQ_VERSION }} |
+            | OBS Studio | ${{ env.OBS_VERSION }} |
+            | Pandoc | ${{ env.PANDOC_VERSION }} |
+
+            ### Files
+            | File | SHA256 |
+            |------|--------|
+            | `${{ env.BUNDLE_ZIP }}` | `${{ env.BUNDLE_SHA256 }}` |
+
+            ### 安裝說明
+            1. 解壓縮 ZIP 到任意目錄
+            2. 進入解壓後的 `kb-guardian-windows-offline-${{ github.ref_name }}` 資料夾
+            3. 執行 `kb-guardian.exe`（Logseq / OBS / Pandoc 路徑已預設對應 `_internal\config.ini`）
+            4. 如需自訂路徑，編輯 `_internal\config.ini` 後重新啟動
+
+  # ── Windows 輕量版（僅 KB-Guardian 本體）────────────────────────────
+  build-windows-app:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: pip install watchdog pyinstaller
+
+      - name: Build Windows executable
+        run: |
+          pyinstaller --noconfirm --onedir --windowed --name kb-guardian `
+            --add-data "config.ini;." kb_guardian/main.py
+
+      - name: Package app-only ZIP
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}"
@@ -33,35 +138,22 @@ jobs:
           $zipName = "kb-guardian-windows-$version.zip"
           Compress-Archive -Path dist\kb-guardian\* -DestinationPath $zipName
           $hash = (Get-FileHash $zipName -Algorithm SHA256).Hash.ToLower()
-          Write-Output "ZIP: $zipName"
-          Write-Output "SHA256: $hash"
           echo "ZIP_NAME=$zipName" >> $env:GITHUB_ENV
           echo "SHA256=$hash" >> $env:GITHUB_ENV
 
-      - name: Upload artifact
+      - name: Upload app artifact
         uses: actions/upload-artifact@v4
         with:
-          name: kb-guardian-windows
+          name: kb-guardian-windows-app
           path: ${{ env.ZIP_NAME }}
 
-      - name: Create GitHub Release (on tag push)
+      - name: Append to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ env.ZIP_NAME }}
-          body: |
-            ## KB-Guardian ${{ github.ref_name }}
 
-            ### Windows Build
-            | File | SHA256 |
-            |------|--------|
-            | `${{ env.ZIP_NAME }}` | `${{ env.SHA256 }}` |
-
-            ### 安裝說明
-            1. 解壓縮 ZIP 到任意目錄
-            2. 編輯 `_internal\config.ini` 設定路徑
-            3. 執行 `kb-guardian.exe`
-
+  # ── Linux 版（含 tkinter）────────────────────────────────────────────
   build-linux:
     runs-on: ubuntu-latest
     steps:
@@ -78,8 +170,7 @@ jobs:
           sudo apt-get install -y python3-tk
 
       - name: Install Python dependencies
-        run: |
-          pip install watchdog pyinstaller
+        run: pip install watchdog pyinstaller
 
       - name: Build Linux executable
         run: |
@@ -102,7 +193,7 @@ jobs:
           name: kb-guardian-linux
           path: ${{ env.ZIP_NAME }}
 
-      - name: Append to GitHub Release (on tag push)
+      - name: Append to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
