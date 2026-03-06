@@ -1,6 +1,6 @@
 ﻿# KB-Guardian (Personal Offline Work KB)
 
-離線個人知識管理啟動器（會計事務所個人版）。
+離線個人知識管理啟動器
 
 ## 目標
 - 離線可用（目標機不需 npm/pip）
