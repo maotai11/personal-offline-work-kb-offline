@@ -28,6 +28,12 @@ New-Item -ItemType Directory -Force -Path (Join-Path $bundleRoot "videos") | Out
 New-Item -ItemType Directory -Force -Path (Join-Path $bundleRoot "exports") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $bundleRoot "backups") | Out-Null
 # logs 由 kb-guardian.exe 啟動時自動建立於 tools/kb-guardian/logs/，不在根層建立
+
+# Compress-Archive 不包含空目錄，用 .gitkeep 佔位確保 ZIP 結構完整
+foreach ($emptyDir in @("videos","exports","backups","KB/pages","KB/journals","KB/assets")) {
+  $placeholder = Join-Path $bundleRoot "$emptyDir/.gitkeep"
+  "" | Set-Content -Path $placeholder -Encoding UTF8
+}
 New-Item -ItemType Directory -Force -Path (Join-Path $ProjectRoot $ReleaseDir) | Out-Null
 
 Copy-Item -Recurse -Force "$ProjectRoot/dist/kb-guardian/*" $toolRoot
