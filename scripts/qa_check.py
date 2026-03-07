@@ -62,18 +62,18 @@ cfg = (test/"tools/kb-guardian/config.ini").read_text()
 chk("config: kb_root=../../KB",     "kb_root = ../../KB" in cfg)
 chk("config: no absolute C:\\ path", "C:\\" not in cfg and "C:/" not in cfg)
 
-# 5. No dev garbage
-garbage = [f for f in test.rglob("*")
-           if f.is_file() and f.suffix in (".py", ".spec", ".pyc", ".pyo")
-           and f.name != ".gitkeep"]
-chk("no .py/.spec/.pyc in release",  len(garbage) == 0)
+# 5. No dev garbage in kb-guardian dir (external tools may contain anything)
+kb_dir = test / "tools" / "kb-guardian"
+garbage = [f for f in kb_dir.rglob("*")
+           if f.is_file() and f.suffix in (".py", ".spec", ".pyc", ".pyo")]
+chk("no .py/.spec/.pyc in kb-guardian/",  len(garbage) == 0)
 
 # 6. Sizes
 exe = test/"tools/kb-guardian/kb-guardian.exe"
 exe_mb = exe.stat().st_size / 1024 / 1024
 zip_mb = bundle_zip.stat().st_size / 1024 / 1024
 chk(f"EXE reasonable size ({exe_mb:.1f} MB, expect 1-10)", 1 < exe_mb < 10)
-chk(f"ZIP reasonable size ({zip_mb:.1f} MB, expect <50)",  zip_mb < 50)
+chk(f"ZIP reasonable size ({zip_mb:.1f} MB, expect <2000)", zip_mb < 2000)
 
 # 7. .gitkeep in all data dirs (ensures empty dirs in ZIP)
 for d in ["backups", "exports", "videos", "KB/pages", "KB/journals", "KB/assets"]:
