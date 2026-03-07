@@ -40,33 +40,41 @@ Copy-Item -Recurse -Force "$ProjectRoot/dist/kb-guardian/*" $toolRoot
 Copy-Item -Force "$ProjectRoot/START_HERE.bat" $bundleRoot
 Copy-Item -Force "$ProjectRoot/config.offline.ini" (Join-Path $bundleRoot "tools/kb-guardian/config.ini")
 
+# 複製可攜式工具（若本機已備妥）
+foreach ($tool in @("logseq-portable", "obs-portable", "pandoc")) {
+  $src = Join-Path $ProjectRoot "tools/$tool"
+  if (Test-Path $src) {
+    Write-Host "Copying tool: $tool ..."
+    Copy-Item -Recurse -Force $src (Join-Path $bundleRoot "tools/$tool")
+  } else {
+    Write-Warning "Tool not found, skipping: $tool"
+  }
+}
+
 $offlineReadme = Join-Path $bundleRoot "README_OFFLINE.md"
 # 使用單引號 here-string（@'...'@）避免 PowerShell 將 `t 解析為 tab 字元
 $readmeContent = @'
-# KB-Guardian 離線使用包
+# KB-Guardian 離線使用包（全包含版）
 
 ## 使用步驟
 
-1. 將可攜式工具解壓放置於以下路徑：
-   - tools/logseq-portable/Logseq.exe
-   - tools/obs-portable/bin/64bit/obs64.exe
-   - tools/pandoc/pandoc.exe
-
+1. 解壓此 ZIP 到任意位置（例如 D:\WorkStation\）
 2. 雙擊 START_HERE.bat 啟動
 
-3. 備份、匯出、Log 會自動寫入同層資料夾（backups/、exports/、tools/kb-guardian/logs/）
+全部工具已內附，目標機不需安裝任何軟體、不需連網。
+
+## 內附工具版本
+
+- Logseq portable (tools/logseq-portable/Logseq.exe)
+- OBS Studio portable (tools/obs-portable/bin/64bit/obs64.exe)
+- Pandoc (tools/pandoc/pandoc.exe)
+- KB-Guardian (tools/kb-guardian/kb-guardian.exe) — 已內含 Python 執行環境
 
 ## 注意事項
 
-- kb-guardian.exe 已內含 Python 執行環境，目標機不需安裝 Python
 - 若資料夾結構不同，請編輯 tools/kb-guardian/config.ini 調整路徑
-- 請使用「可攜式（portable）zip 版」的 Logseq / OBS，安裝版無法直接放入 tools/
-
-## 工具下載（需在有網路的機器預先下載）
-
-- Logseq portable zip：GitHub > logseq/logseq > Releases > 下載 .zip（非 .exe 安裝版）
-- OBS portable zip：GitHub > obsproject/obs-studio > Releases > 下載 Windows ZIP（非 Installer）
-- Pandoc zip：GitHub > jgm/pandoc > Releases > 下載 windows-x86_64.zip
+- 備份、匯出、Log 會自動寫入同層資料夾（backups/、exports/、tools/kb-guardian/logs/）
+- 請勿將此包直接放入中文或含空格的路徑（部分工具不支援）
 '@
 $readmeContent | Set-Content -Encoding UTF8 $offlineReadme
 

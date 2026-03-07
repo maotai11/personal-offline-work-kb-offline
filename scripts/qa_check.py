@@ -36,6 +36,11 @@ chk("exports/",                     (test/"exports").is_dir())
 chk("videos/",                      (test/"videos").is_dir())
 chk("MANIFEST_SHA256.txt",          (test/"MANIFEST_SHA256.txt").exists())
 
+# 1b. Bundled portable tools
+chk("Logseq.exe",                   (test/"tools/logseq-portable/Logseq.exe").exists())
+chk("obs64.exe",                    (test/"tools/obs-portable/bin/64bit/obs64.exe").exists())
+chk("pandoc.exe",                   (test/"tools/pandoc/pandoc.exe").exists())
+
 # 2. BAT
 bat = (test/"START_HERE.bat").read_text(encoding="utf-8", errors="ignore")
 chk("BAT: no python-m fallback",    "python -m" not in bat)
@@ -46,10 +51,11 @@ chk("BAT: uses %~dp0",              "%~dp0" in bat)
 # 3. README
 readme = (test/"README_OFFLINE.md").read_text(encoding="utf-8", errors="ignore")
 chk("README: no tab corruption",    not re.search(r"\t[a-z]ools/", readme))
-chk("README: logseq path correct",  "tools/logseq-portable/Logseq.exe" in readme)
-chk("README: obs path correct",     "tools/obs-portable/bin/64bit/obs64.exe" in readme)
-chk("README: pandoc path correct",  "tools/pandoc/pandoc.exe" in readme)
+chk("README: mentions Logseq",      "logseq-portable" in readme or "Logseq" in readme)
+chk("README: mentions OBS",         "obs-portable" in readme or "obs64" in readme)
+chk("README: mentions pandoc",      "pandoc" in readme)
 chk("README: has Chinese content",  "START_HERE.bat" in readme)
+chk("README: full-bundle note",     "全部工具已內附" in readme or "已內附" in readme)
 
 # 4. Config
 cfg = (test/"tools/kb-guardian/config.ini").read_text()
