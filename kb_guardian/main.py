@@ -436,8 +436,8 @@ class KBGuardianApp:
         subprocess.Popen([str(exe)], cwd=str(exe.parent))
 
     def export_sop(self) -> None:
-        """匯出單一 SOP 為 TXT 與 PDF。
-        filedialog 在主執行緒呼叫；pandoc 執行移至背景執行緒，避免 UI 凍結。
+        """匯出單一 SOP 為 TXT 與 PDF，並自動或手動附上對應影片連結。
+        所有 filedialog 在主執行緒呼叫；pandoc 執行移至背景執行緒，避免 UI 凍結。
         """
         pages_dir = self.cfg.kb_root / "pages"
         if not pages_dir.exists():
@@ -448,7 +448,7 @@ class KBGuardianApp:
             messagebox.showerror("錯誤", f"找不到 Pandoc：{pandoc}")
             return
 
-        # filedialog 必須在主執行緒呼叫
+        # Step 1: 選 SOP .md（主執行緒）
         src = filedialog.askopenfilename(
             title="選擇要匯出的 SOP",
             initialdir=str(pages_dir),
@@ -458,14 +458,54 @@ class KBGuardianApp:
             return
         src_path = Path(src)
 
+        # Step 2A: 自動偵測 videos/ 下同名影片
+        _video_exts = (".mp4", ".mov", ".avi", ".mkv", ".wmv")
+        video_path: Path | None = None
+        for ext in _video_exts:
+            candidate = self.cfg.videos_dir / f"{src_path.stem}{ext}"
+            if candidate.exists():
+                video_path = candidate
+                break
+
+        # Step 2B: 若未自動配對，彈出手動選擇（可直接關閉略過）
+        if video_path is None:
+            chosen = filedialog.askopenfilename(
+                title=f"選擇「{src_path.stem}」的對應影片（可直接關閉略過）",
+                initialdir=str(self.cfg.videos_dir),
+                filetypes=[
+                    ("影片", "*.mp4 *.mov *.avi *.mkv *.wmv"),
+                    ("所有檔案", "*.*"),
+                ],
+            )
+            if chosen:
+                video_path = Path(chosen)
+
         def _do() -> None:
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
             base_name = f"SOP_{src_path.stem}_{ts}"
             txt_out = self.cfg.exports_dir / f"{base_name}.txt"
             pdf_out = self.cfg.exports_dir / f"{base_name}.pdf"
-            subprocess.run([str(pandoc), str(src_path), "-o", str(txt_out)], check=True)
-            subprocess.run([str(pandoc), str(src_path), "-o", str(pdf_out)], check=True)
-            self.logger.info("匯出完成：%s, %s", txt_out, pdf_out)
+
+            # 若有影片，建立臨時 .md 附加影片區塊後再轉檔
+            tmp_md: Path | None = None
+            if video_path:
+                tmp_md = self.cfg.exports_dir / f"_{base_name}_tmp.md"
+                content = src_path.read_text(encoding="utf-8")
+                content += f"\n\n## 對應影片\n\n影片檔案：`{video_path.name}`\n"
+                tmp_md.write_text(content, encoding="utf-8")
+                pandoc_src = tmp_md
+            else:
+                pandoc_src = src_path
+
+            try:
+                subprocess.run([str(pandoc), str(pandoc_src), "-o", str(txt_out)], check=True)
+                subprocess.run([str(pandoc), str(pandoc_src), "-o", str(pdf_out)], check=True)
+                self.logger.info("匯出完成：%s, %s", txt_out, pdf_out)
+                if video_path:
+                    self.logger.info("附上影片連結：%s", video_path.name)
+            finally:
+                if tmp_md and tmp_md.exists():
+                    tmp_md.unlink()
 
         self._run_bg(_do, notify=True)
 
