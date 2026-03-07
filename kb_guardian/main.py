@@ -78,7 +78,12 @@ class AppConfig:
         self.root = root
         self.config_path = root / "config.ini"
         if not self.config_path.exists():
+            # PyInstaller frozen 模式下 datas 進入 _MEIPASS，先找旁邊再找 _MEIPASS
             example = root / "config.ini.example"
+            if not example.exists():
+                meipass = getattr(sys, "_MEIPASS", None)
+                if meipass:
+                    example = Path(meipass) / "config.ini.example"
             if example.exists():
                 shutil.copy2(example, self.config_path)
         self.parser = configparser.ConfigParser()
@@ -197,6 +202,7 @@ class KBGuardianApp:
         self.guard_var = tk.StringVar(value="Delete Guard：未啟用")
         self.review_var = tk.StringVar(value="複習提醒：無")
 
+        self._set_window_icon()
         self._build_ui()
         self._refresh_status()
 
@@ -205,6 +211,19 @@ class KBGuardianApp:
 
         if self.cfg.auto_backup_on_launch:
             self._run_bg(self.backup_kb, notify=False)
+
+    def _set_window_icon(self) -> None:
+        """設定視窗圖示（.ico 檔，優先找 exe 旁，再找 _MEIPASS）。"""
+        try:
+            icon_path = self.root_dir / "icon.ico"
+            if not icon_path.exists():
+                meipass = getattr(sys, "_MEIPASS", None)
+                if meipass:
+                    icon_path = Path(meipass) / "icon.ico"
+            if icon_path.exists():
+                self.ui.iconbitmap(str(icon_path))
+        except Exception:
+            pass  # 無圖示時靜默略過，不影響主流程
 
     def _setup_logger(self) -> logging.Logger:
         """建立檔案日誌器。"""
@@ -231,7 +250,7 @@ class KBGuardianApp:
             ("開啟知識庫", self.launch_logseq),
             ("開始錄影", self.launch_obs),
             ("立即備份", lambda: self._run_bg(self.backup_kb, notify=True)),
-            ("匯出 SOP", lambda: self._run_bg(self.export_sop, notify=True)),
+            ("匯出 SOP", self.export_sop),
             ("還原備份", self.restore_backup),
             ("重新整理", self._refresh_status),
         ]
@@ -395,14 +414,12 @@ class KBGuardianApp:
         create_backup_archive(self.cfg.kb_root, self.cfg.backups_dir, self.cfg.max_backups, self.logger, prefix=prefix)
 
     def launch_logseq(self) -> None:
-        """啟動 Logseq，可選擇先自動備份。"""
-        try:
+        """啟動 Logseq，可選擇先自動備份。備份在背景執行，不凍結 UI。"""
+        def _do() -> None:
             if self.cfg.auto_backup_on_launch:
                 self.backup_kb()
             self._launch_exe(self.cfg.logseq_exe)
-        except Exception as exc:
-            self.logger.exception("啟動 Logseq 失敗")
-            messagebox.showerror("錯誤", str(exc))
+        self._run_bg(_do)
 
     def launch_obs(self) -> None:
         """啟動 OBS。"""
@@ -419,14 +436,19 @@ class KBGuardianApp:
         subprocess.Popen([str(exe)], cwd=str(exe.parent))
 
     def export_sop(self) -> None:
-        """匯出單一 SOP 為 TXT 與 PDF。"""
+        """匯出單一 SOP 為 TXT 與 PDF。
+        filedialog 在主執行緒呼叫；pandoc 執行移至背景執行緒，避免 UI 凍結。
+        """
         pages_dir = self.cfg.kb_root / "pages"
         if not pages_dir.exists():
-            raise FileNotFoundError(f"找不到 pages 目錄：{pages_dir}")
+            messagebox.showerror("錯誤", f"找不到 pages 目錄：{pages_dir}")
+            return
         pandoc = self.cfg.pandoc_exe
         if not pandoc.exists():
-            raise FileNotFoundError(f"找不到 Pandoc：{pandoc}")
+            messagebox.showerror("錯誤", f"找不到 Pandoc：{pandoc}")
+            return
 
+        # filedialog 必須在主執行緒呼叫
         src = filedialog.askopenfilename(
             title="選擇要匯出的 SOP",
             initialdir=str(pages_dir),
@@ -435,17 +457,22 @@ class KBGuardianApp:
         if not src:
             return
         src_path = Path(src)
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        base_name = f"SOP_{src_path.stem}_{ts}"
-        txt_out = self.cfg.exports_dir / f"{base_name}.txt"
-        pdf_out = self.cfg.exports_dir / f"{base_name}.pdf"
 
-        subprocess.run([str(pandoc), str(src_path), "-o", str(txt_out)], check=True)
-        subprocess.run([str(pandoc), str(src_path), "-o", str(pdf_out)], check=True)
-        self.logger.info("匯出完成：%s, %s", txt_out, pdf_out)
+        def _do() -> None:
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            base_name = f"SOP_{src_path.stem}_{ts}"
+            txt_out = self.cfg.exports_dir / f"{base_name}.txt"
+            pdf_out = self.cfg.exports_dir / f"{base_name}.pdf"
+            subprocess.run([str(pandoc), str(src_path), "-o", str(txt_out)], check=True)
+            subprocess.run([str(pandoc), str(src_path), "-o", str(pdf_out)], check=True)
+            self.logger.info("匯出完成：%s, %s", txt_out, pdf_out)
+
+        self._run_bg(_do, notify=True)
 
     def restore_backup(self) -> None:
-        """選擇備份檔並還原 KB。"""
+        """選擇備份檔並還原 KB。
+        filedialog 與確認對話框在主執行緒；備份＋解壓在背景執行緒，避免 UI 凍結。
+        """
         zip_file = filedialog.askopenfilename(
             title="選擇備份檔",
             initialdir=str(self.cfg.backups_dir),
@@ -456,31 +483,32 @@ class KBGuardianApp:
         if not messagebox.askyesno("確認", "還原會覆蓋現有 KB，是否繼續？"):
             return
 
-        # 還原前先做一次保險備份
-        self.backup_kb(prefix="KB_pre_restore")
+        def _do() -> None:
+            # 還原前先做一次保險備份
+            self.backup_kb(prefix="KB_pre_restore")
 
-        tmp_dir = self.root_dir / "_restore_tmp"
-        if tmp_dir.exists():
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-        tmp_dir.mkdir(parents=True, exist_ok=True)
+            tmp_dir = self.root_dir / "_restore_tmp"
+            if tmp_dir.exists():
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+            tmp_dir.mkdir(parents=True, exist_ok=True)
 
-        try:
-            with zipfile.ZipFile(zip_file, "r") as zf:
-                zf.extractall(tmp_dir)
+            try:
+                with zipfile.ZipFile(zip_file, "r") as zf:
+                    zf.extractall(tmp_dir)
 
-            restored_kb = tmp_dir / self.cfg.kb_root.name
-            if not restored_kb.exists():
-                # 相容：若 zip 直接從 KB 目錄內部開始壓
-                restored_kb = tmp_dir
+                restored_kb = tmp_dir / self.cfg.kb_root.name
+                if not restored_kb.exists():
+                    # 相容：若 zip 直接從 KB 目錄內部開始壓
+                    restored_kb = tmp_dir
 
-            if self.cfg.kb_root.exists():
-                shutil.rmtree(self.cfg.kb_root, ignore_errors=True)
-            shutil.copytree(restored_kb, self.cfg.kb_root)
-            messagebox.showinfo("完成", "備份還原完成。")
-            self.logger.info("還原完成：%s", zip_file)
-        finally:
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-            self._refresh_status()
+                if self.cfg.kb_root.exists():
+                    shutil.rmtree(self.cfg.kb_root, ignore_errors=True)
+                shutil.copytree(restored_kb, self.cfg.kb_root)
+                self.logger.info("還原完成：%s", zip_file)
+            finally:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+
+        self._run_bg(_do, notify=True)
 
     def run(self) -> None:
         """啟動 UI 主迴圈。"""

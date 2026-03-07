@@ -19,6 +19,8 @@ if (-not (Test-Path ".venv")) {
 & .\.venv\Scripts\python -m py_compile .\kb_guardian\main.py
 & .\.venv\Scripts\python -m kb_guardian.smoke
 
-& .\.venv\Scripts\pyinstaller --noconfirm --onedir --windowed --name kb-guardian --add-data "config.ini.example;." .\kb_guardian\main.py
+& .\.venv\Scripts\python .\scripts\create_icon.py
+
+& .\.venv\Scripts\pyinstaller --noconfirm kb-guardian.spec
 
 Write-Host "Build done: $ProjectRoot\dist\kb-guardian"

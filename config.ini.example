@@ -1,11 +1,11 @@
 ﻿[paths]
-kb_root = ../KB
-videos_dir = ../videos
-exports_dir = ../exports
-backups_dir = ../backups
-logseq_exe = ../tools/logseq-portable/Logseq.exe
-obs_exe = ../tools/obs-portable/bin/64bit/obs64.exe
-pandoc_exe = ../tools/pandoc/pandoc.exe
+kb_root = KB
+videos_dir = videos
+exports_dir = exports
+backups_dir = backups
+logseq_exe = tools/logseq-portable/Logseq.exe
+obs_exe = tools/obs-portable/bin/64bit/obs64.exe
+pandoc_exe = tools/pandoc/pandoc.exe
 
 [backup]
 max_backups = 30

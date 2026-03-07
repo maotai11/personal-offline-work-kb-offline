@@ -3,7 +3,6 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
-*.spec
 build/
 dist/
 release/
@@ -13,3 +12,4 @@ backups/
 exports/
 tools/
 autopilot/runtime/
+_restore_tmp/

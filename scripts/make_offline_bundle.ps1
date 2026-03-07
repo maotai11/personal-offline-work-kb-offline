@@ -27,29 +27,42 @@ New-Item -ItemType Directory -Force -Path (Join-Path $bundleRoot "KB/assets") | 
 New-Item -ItemType Directory -Force -Path (Join-Path $bundleRoot "videos") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $bundleRoot "exports") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $bundleRoot "backups") | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $bundleRoot "logs") | Out-Null
+# logs 由 kb-guardian.exe 啟動時自動建立於 tools/kb-guardian/logs/，不在根層建立
 New-Item -ItemType Directory -Force -Path (Join-Path $ProjectRoot $ReleaseDir) | Out-Null
 
 Copy-Item -Recurse -Force "$ProjectRoot/dist/kb-guardian/*" $toolRoot
 Copy-Item -Force "$ProjectRoot/START_HERE.bat" $bundleRoot
-Copy-Item -Force "$ProjectRoot/config.ini.example" (Join-Path $bundleRoot "tools/kb-guardian/config.ini")
+Copy-Item -Force "$ProjectRoot/config.offline.ini" (Join-Path $bundleRoot "tools/kb-guardian/config.ini")
 
 $offlineReadme = Join-Path $bundleRoot "README_OFFLINE.md"
-@"
-# KB-Guardian Offline Bundle
+# 使用單引號 here-string（@'...'@）避免 PowerShell 將 `t 解析為 tab 字元
+$readmeContent = @'
+# KB-Guardian 離線使用包
 
-## Usage
-1. Place your portable tools under:
-   - `tools/logseq-portable/Logseq.exe`
-   - `tools/obs-portable/bin/64bit/obs64.exe`
-   - `tools/pandoc/pandoc.exe`
-2. Double-click `START_HERE.bat`.
-3. Backups, exports, and logs are written to sibling folders in this bundle.
+## 使用步驟
 
-## Notes
-- This package is self-contained for Python runtime (`kb-guardian.exe` included).
-- Edit `tools/kb-guardian/config.ini` when your folder layout differs.
-"@ | Set-Content -Encoding UTF8 $offlineReadme
+1. 將可攜式工具解壓放置於以下路徑：
+   - tools/logseq-portable/Logseq.exe
+   - tools/obs-portable/bin/64bit/obs64.exe
+   - tools/pandoc/pandoc.exe
+
+2. 雙擊 START_HERE.bat 啟動
+
+3. 備份、匯出、Log 會自動寫入同層資料夾（backups/、exports/、tools/kb-guardian/logs/）
+
+## 注意事項
+
+- kb-guardian.exe 已內含 Python 執行環境，目標機不需安裝 Python
+- 若資料夾結構不同，請編輯 tools/kb-guardian/config.ini 調整路徑
+- 請使用「可攜式（portable）zip 版」的 Logseq / OBS，安裝版無法直接放入 tools/
+
+## 工具下載（需在有網路的機器預先下載）
+
+- Logseq portable zip：GitHub > logseq/logseq > Releases > 下載 .zip（非 .exe 安裝版）
+- OBS portable zip：GitHub > obsproject/obs-studio > Releases > 下載 Windows ZIP（非 Installer）
+- Pandoc zip：GitHub > jgm/pandoc > Releases > 下載 windows-x86_64.zip
+'@
+$readmeContent | Set-Content -Encoding UTF8 $offlineReadme
 
 $manifest = Join-Path $bundleRoot "MANIFEST_SHA256.txt"
 Get-ChildItem -File -Recurse $bundleRoot |

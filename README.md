@@ -20,6 +20,7 @@
 
 ## 目標機
 僅放置 `dist/kb-guardian/`，不需安裝 Python。
+若是離線工作站結構（`tools/kb-guardian` 與同層 `KB`），請使用 `config.offline.ini` 作為 `tools/kb-guardian/config.ini`。
 
 ## Auto-Copilot（無人值守）
 執行下列任一方式可自動完成 build + smoke + 離線包打包 + checkpoint：
